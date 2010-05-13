@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: Slap Plague
+## Author: Askunia - EU Zenedar ( Horde ofc ! )
+## SavedVariables: SLPlagueDB
+## Notes: Another way to look at the Unbound Plague handling
+
+SLPlague.lua
+SLPlague_Range.lua
