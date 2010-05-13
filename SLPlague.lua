@@ -30,9 +30,10 @@ SLPlague.options = {
 			order = newOrder(),
 			childGroups = "tree",
 			args = {
-				enable = {
+				master = {
 					type = "toggle",
-					name = "Enable Slap Plague",
+					name = "Enable Master Mode",
+					desc = "The master sends out all whispers and marks targets. Only one player in the raid is needed for that!",
 					order = newOrder(),
 				},
 				raidmarksgroup = {
@@ -45,7 +46,7 @@ SLPlague.options = {
 							name = "Enable Raid Marks",
 							order = newOrder(),
 						},
-						currenttarget = {
+						currenttargetmark = {
 							type = "select",
 							name = "Current Plague Target",
 							values = {
@@ -60,7 +61,7 @@ SLPlague.options = {
 							},
 							order = newOrder(),
 						},
-						nexttarget = {
+						nexttargetmark = {
 							type = "select",
 							name = "Next Plague Target",
 							values = {
@@ -125,9 +126,9 @@ end
 
 local defaults = {
 	profile = {
-		nexttarget = "star",
-		currenttarget = "skull",
-		enable = false,
+		nexttargetmark = "star",
+		currenttargetmark = "skull",
+		master = false,
 		raidwarning = false,
 		whispers = false,
 		raidmarks = false,
@@ -167,20 +168,21 @@ function SLPlague:OnInitialize()
 	LibStub("AceConfig-3.0"):RegisterOptionsTable("SLPlague", self.options)
 	self.optionsFrame = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("SLPlague", "SLPlague")
 
---	self:RegisterChatCommand("SLPlague", "ChatCommand")
+	self:RegisterChatCommand("slp", "ChatCommand")
 
 end
 
 function SLPlague:OnEnable()
 	self.timerCount = 0
+	self.debug = false
 	self:UnregisterAllEvents()
-	if (self.db.profile.raidleader==1) then
+	if (self.db.profile.master==true) then
 		-- This is going to be the Master of Disaster!
 		self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", "SpellApplied")
 	end
 	-- Listen for Addon Comm from the Master
 	self:UnregisterAllComm()
-	self:RegisterComm("SlPlague", "MessageReceived")
+	self:RegisterComm("SLPlague", "MessageReceived")
 end
 
 function SLPlague:MessageReceived(prefix, message, distribution, sender)
@@ -228,6 +230,10 @@ function SLPlague:PlagueTakeOverTimer()
 	end
 end
 
+-- This Timerfunction checks if the Raid Marks have been changed
+function SLPlague:CheckRaidMarksTimer()
+end
+
 function SLPlague:SpellApplied(event, timestamp, eventType, srcGuid, srcName, srcFlags, dstGuid, dstName, dstFlags, ...)
 	if (eventType=="SPELL_AURA_APPLIED") then
 		local spellId, spellName, spellSchool = select (1, ... )
@@ -239,49 +245,84 @@ function SLPlague:SpellApplied(event, timestamp, eventType, srcGuid, srcName, sr
 			else
 				maxTimerTime = 12/(count+1)
 			end
-			-- Get the next Target out of our list
-			self.currentTarget = dstName
-			target = self:GetNextTarget()
-
-			-- Massive debugging for the test tonight :)
-			print(("Current Target: %s"):format(self.currentTarget))
-			print(("Next Target: %s"):format(target))
+			-- Get the next Target from our list
+			-- Also checks if players can get the debuff or not.
+			target = self:GetNextTarget(dstName)
+			if (target~=nil) then
+				if (self.debug==true)
+				then
+					print(("DEBUG - Next Target is %s"):format(target))
+				end
 
 			-- Send an addon message to both players and start the timer on em
 			-- First to the debuffed player to start his timer
---TODO			SendAddonMessage("SlPlague","STPCT ".maxTimerTime,"WHISPER",self.currentTarget)
---TODO			SendChatMessage(target." is taking the plague off you!","WHISPER",GetDefaultLanguage("player"),self.currentTarget)
+--TODO		SendAddonMessage("SLPlague","STPCT ".maxTimerTime,"WHISPER",self.currentTarget)
+--TODO		SendChatMessage(target." is taking the plague off you!","WHISPER",GetDefaultLanguage("player"),self.currentTarget)
 			
 			-- Second to the designated next target
---TODO			SendAddonMessage("SlPlague","STPNT ".maxTimerTime,"WHISPER",target)
---TODO			SendChatMessage("Take the plague off ".self.currentTarget,"WHISPER",GetDefaultLanguage("player"),target)
-			if (self.db.profile.raidmarks==true) then
-				self:MarkTargets()
+--TODO		SendAddonMessage("SLPlague","STPNT ".maxTimerTime,"WHISPER",target)
+--TODO		SendChatMessage("Take the plague off ".self.currentTarget,"WHISPER",GetDefaultLanguage("player"),target)
+				if (self.db.profile.raidmarks==true) then
+					SetRaidTarget(cTarget,ConvertToIconIndex(self.db.profile.nexttargetmark))
+					SetRaidTarget(cTarget,ConvertToIconIndex(self.db.profile.currenttargetmark))
+					if (self.debug==true) then
+						print(("DEBUG - Setting %s on Current Target"):format(self.db.profile.currenttarget))
+						print(("DEBUG - Setting %s on Next Target"):format(self.db.profile.nexttarget))
+					end
+				end
 			end
 		end
 	end
 end
 
-function SLPlague:MarkTargets()
+function SLPlague:ConvertToIconIndex(mark)
+	if (mark=="Star") then index=1 
+	elseif (mark=="Circle") then index=2
+	elseif (mark=="Diamond") then index=3
+	elseif (mark=="Triangle") then index=4
+	elseif (mark=="Moon") then index=5
+	elseif (mark=="Square") then index=6
+	elseif (mark=="Cross") then index=7
+	elseif (mark=="Skull") then index=8
+	end
+	return index
 end
 
-function SLPlague:GetNextTarget()
+function SLPlague:ChatCommand()
+	if (self.debug==false) then
+		self.debug=true
+		print("DEBUG - Active!")
+	else
+		self.debug=false
+		print("DEBUG - Deactivated!")
+	end
+end
+
+function SLPlague:OptionsGet(info)
+	return self.db.profile[info[#info]]
+end
+
+function SLPlague:OptionsSet(info, value)
+	self.db.profile[info[#info]] = value
+end
+
+function SLPlague:GetNextTarget(curr_target)
 	--Loop over the list of possible targets
 	local dist = 0
 	local tmpdist = 0
 	local nextTarget = nil
-	for poss_target in SLPlague.db.profile.targets do
-		if UnitInRaid(poss_target) and not UnitIsDeadOrGhost(poss_target) and UnitIsConnected(poss_target) and not self.currentTarget==poss_target then
-			local name = UnitDebuff(player, sickness)
+	for i, poss_target in pairs(SLPlague.db.profile.targets) do
+		if UnitInRaid(poss_target) and not UnitIsDeadOrGhost(poss_target) and UnitIsConnected(poss_target) and not curr_target==poss_target then
+			local name = UnitDebuff(poss_target, sickness)
 			if not name then
 				-- Get the Distance between the two players and remember it
 				if (dist==0) then
 				-- First Call
-					dist=SLPlague_Range:CalculateRange(self.currentTarget,poss_target)	
+					dist=SLPlague:CalculateRange(self.currentTarget,poss_target)	
 					nextTarget = poss_target
 				else
 				-- We have a distance already check if current player is closer
-					tmpdist=SLPlague_Range:CalculateRange(self.currentTarget,poss_target)
+					tmpdist=SLPlague:CalculateRange(self.currentTarget,poss_target)
 					if (tmpdist<dist) then
 						nextTarget = poss_target
 					end
@@ -302,5 +343,6 @@ end
 	  
 
 -- TODO
--- the whispers and ( if activated ) marks the two targets.
+-- Get the Addon communication working
+-- A function to check the marks every second and if they got changed set em back
 -- Fire up a local bar to show when you have to do something

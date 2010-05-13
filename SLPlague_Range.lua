@@ -2,7 +2,7 @@ function SLPlague:CalculateRange(pTarget,tTarget)
 	-- First off position of the player
 	local ppX, ppY = self:GetUnitPosition(pTarget)
 	-- Now we need the UnitID of the current target we got
-	local ttX, ttY = self:GetUnitPosition(xTarget)
+	local ttX, ttY = self:GetUnitPosition(tTarget)
 	local dist = math.sqrt((ttX-ppX)^2+(ttY-ppY)^2)
 	return dist
 end
@@ -25,7 +25,7 @@ function SLPlague:GetZoneScale()
 	if level>0 then
 		tex=tex..level
 	end
-	return SLPLague.zoneData[tex]
+	return SLPlague.zoneData[tex]
 end
 	
 
